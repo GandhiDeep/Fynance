@@ -7,10 +7,6 @@
     "icon": "./assets/icon.png",
     "scheme": "fynance",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "splash": {
-      "backgroundColor": "#0A0A0F"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.personal.fynance"
@@ -25,7 +21,13 @@
       "expo-router",
       "expo-secure-store",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0A0A0F"
+        }
+      ]
     ],
     "extra": {
       "router": {},
