@@ -1,0 +1,15 @@
+export type {
+  Transaction,
+  Account,
+  Category,
+  Goal,
+  RecurringBill,
+  MonthlyPlan,
+  DashboardData,
+  CategorySpending,
+  GoalProgress,
+  UpcomingBill,
+  SyncResult,
+  NewTransaction,
+  TransactionFilters,
+} from '@fynance/shared/types';
