@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
       SHEET_TABS.GOALS,
       SHEET_TABS.RECURRING,
       SHEET_TABS.SETTINGS,
+      SHEET_TABS.MONTHLY_PLANS,
     ]);
 
     const dashboard = computeDashboard({
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
       goals: data[SHEET_TABS.GOALS]?.rows || [],
       recurring: data[SHEET_TABS.RECURRING]?.rows || [],
       settings: data[SHEET_TABS.SETTINGS]?.rows || [],
+      monthly_plans: data[SHEET_TABS.MONTHLY_PLANS]?.rows || [],
     });
 
     return NextResponse.json(dashboard);

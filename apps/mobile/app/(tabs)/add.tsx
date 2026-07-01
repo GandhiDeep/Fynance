@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,20 +13,43 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFinanceStore } from '@/lib/store';
+import { fetchAccounts } from '@/lib/api';
 import { colors, fontSize, spacing, borderRadius } from '@/lib/theme';
 import { Button } from '@/components/ui/Button';
 import { DEFAULT_CATEGORIES } from '@fynance/shared/constants';
+
+function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export default function AddTransactionScreen() {
   const [amount, setAmount] = useState('');
   const [isExpense, setIsExpense] = useState(true);
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Other');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(isoDaysAgo(0));
+  const [account, setAccount] = useState('');
+  const [accountNames, setAccountNames] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const { addManualTransaction, setNeedsRefresh } = useFinanceStore();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    fetchAccounts()
+      .then((data) => setAccountNames(data.accounts.map((a) => a.name)))
+      .catch(() => {});
+  }, []);
+
+  const dateChips = [
+    { label: 'Today', value: isoDaysAgo(0) },
+    { label: 'Yesterday', value: isoDaysAgo(1) },
+    { label: '2 days ago', value: isoDaysAgo(2) },
+  ];
 
   const handleSave = async () => {
     const parsedAmount = parseFloat(amount);
@@ -38,6 +61,10 @@ export default function AddTransactionScreen() {
       Alert.alert('Missing Description', 'Please enter a description.');
       return;
     }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      Alert.alert('Invalid Date', 'Date must be YYYY-MM-DD.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -46,7 +73,7 @@ export default function AddTransactionScreen() {
         description: description.trim(),
         amount: isExpense ? -parsedAmount : parsedAmount,
         category,
-        account: '',
+        account,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setNeedsRefresh(true);
@@ -55,6 +82,7 @@ export default function AddTransactionScreen() {
       setDescription('');
       setCategory('Other');
       setIsExpense(true);
+      setDate(isoDaysAgo(0));
 
       router.back();
     } catch (e) {
@@ -70,7 +98,7 @@ export default function AddTransactionScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.lg }]}>
         <Text style={styles.title}>Add Transaction</Text>
 
         {/* Amount */}
@@ -97,6 +125,7 @@ export default function AddTransactionScreen() {
             autoFocus
           />
         </View>
+        <Text style={styles.amountHint}>{isExpense ? 'Expense' : 'Income'} — tap the sign to switch</Text>
 
         {/* Description */}
         <View style={styles.field}>
@@ -113,6 +142,22 @@ export default function AddTransactionScreen() {
         {/* Date */}
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>Date</Text>
+          <View style={styles.dateChips}>
+            {dateChips.map((chip) => (
+              <TouchableOpacity
+                key={chip.label}
+                style={[styles.dateChip, date === chip.value && styles.dateChipActive]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setDate(chip.value);
+                }}
+              >
+                <Text style={[styles.dateChipText, date === chip.value && styles.dateChipTextActive]}>
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <TextInput
             style={styles.textInput}
             value={date}
@@ -121,6 +166,29 @@ export default function AddTransactionScreen() {
             placeholderTextColor={colors.textTertiary}
           />
         </View>
+
+        {/* Account */}
+        {accountNames.length > 0 && (
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>Account</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              {accountNames.map((name) => (
+                <TouchableOpacity
+                  key={name}
+                  style={[styles.dateChip, account === name && styles.dateChipActive]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setAccount(account === name ? '' : name);
+                  }}
+                >
+                  <Text style={[styles.dateChipText, account === name && styles.dateChipTextActive]}>
+                    {name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Category Grid */}
         <View style={styles.field}>
@@ -170,7 +238,6 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.xl,
-    paddingTop: 60,
     paddingBottom: 40,
   },
   title: {
@@ -183,8 +250,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xxxl,
     gap: spacing.sm,
+  },
+  amountHint: {
+    fontSize: fontSize.xs,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    marginBottom: spacing.xxl,
   },
   signToggle: {
     width: 44,
@@ -229,6 +302,32 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     fontSize: fontSize.md,
     color: colors.text,
+  },
+  dateChips: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  dateChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: spacing.xs,
+  },
+  dateChipActive: {
+    backgroundColor: colors.green,
+    borderColor: colors.green,
+  },
+  dateChipText: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  dateChipTextActive: {
+    color: '#FFFFFF',
   },
   categoryGrid: {
     flexDirection: 'row',

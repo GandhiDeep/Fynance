@@ -3,6 +3,8 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SecureStore from 'expo-secure-store';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Toast } from '@/components/ui/Toast';
 import { colors } from '@/lib/theme';
 
 export default function RootLayout() {
@@ -42,7 +44,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="light" />
       <Stack
         screenOptions={{
@@ -53,8 +55,13 @@ export default function RootLayout() {
       >
         <Stack.Screen name="login" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="goals" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="recurring" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="categories" options={{ animation: 'slide_from_right' }} />
       </Stack>
-    </>
+      <Toast />
+    </SafeAreaProvider>
   );
 }
 

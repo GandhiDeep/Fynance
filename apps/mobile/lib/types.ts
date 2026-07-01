@@ -12,4 +12,8 @@ export type {
   SyncResult,
   NewTransaction,
   TransactionFilters,
+  PlanData,
+  PlanAllocation,
+  AppSettings,
+  SplitwiseBalance,
 } from '@fynance/shared/types';

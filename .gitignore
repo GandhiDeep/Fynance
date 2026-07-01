@@ -9,6 +9,10 @@ dist/
 .env.local
 .env.*.local
 
+# Service-account keys (never commit these)
+*-service-account*.json
+apps/api/scripts/*.json
+
 # OS
 .DS_Store
 Thumbs.db
@@ -33,5 +37,10 @@ ios/
 web-build/
 
 #files
-*.log   
+*.log
 *.md
+!README.md
+!TESTING.md
+
+.vercel
+.env*

@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
-  FlatList,
+  SectionList,
   TextInput,
   ScrollView,
   TouchableOpacity,
@@ -11,83 +11,126 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchTransactions } from '@/lib/api';
 import { useFinanceStore } from '@/lib/store';
 import { colors, fontSize, spacing, borderRadius } from '@/lib/theme';
-import { getShortMonthName, getCurrentMonthYear } from '@/lib/utils';
+import { getShortMonthName, getCurrentMonthYear, formatCurrency, formatDateFull } from '@/lib/utils';
 import { TransactionItem } from '@/components/cards/TransactionItem';
 import { BottomSheet } from '@/components/ui/BottomSheet';
 import { Button } from '@/components/ui/Button';
 import { DEFAULT_CATEGORIES } from '@fynance/shared/constants';
 import type { Transaction } from '@/lib/types';
 
-const MONTHS = Array.from({ length: 12 }, (_, i) => ({
+const CURRENT = getCurrentMonthYear();
+const MONTHS = Array.from({ length: CURRENT.month }, (_, i) => ({
   value: i + 1,
   label: getShortMonthName(i),
-}));
+})).reverse();
+
+interface Totals {
+  sumIncome: number;
+  sumExpenses: number;
+  total: number;
+}
+
+function groupByDate(txns: Transaction[]): { title: string; data: Transaction[] }[] {
+  const groups = new Map<string, Transaction[]>();
+  for (const t of txns) {
+    const list = groups.get(t.date) || [];
+    list.push(t);
+    groups.set(t.date, list);
+  }
+  return [...groups.entries()].map(([date, data]) => ({ title: date, data }));
+}
 
 export default function TransactionsScreen() {
   const { needsRefresh, setNeedsRefresh, updateCategory, deleteTransaction } = useFinanceStore();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [totals, setTotals] = useState<Totals>({ sumIncome: 0, sumExpenses: 0, total: 0 });
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthYear().month);
-  const [selectedYear] = useState(getCurrentMonthYear().year);
+  const [selectedMonth, setSelectedMonth] = useState(CURRENT.month);
+  const [selectedYear] = useState(CURRENT.year);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const insets = useSafeAreaInsets();
 
-  const loadTransactions = useCallback(async (reset = false) => {
-    const p = reset ? 1 : page;
-    setLoading(true);
-    try {
-      const data = await fetchTransactions({
-        month: selectedMonth,
-        year: selectedYear,
-        category: selectedCategory || undefined,
-        search: search || undefined,
-        page: p,
-        limit: 50,
-      });
-      setTransactions(reset ? data.transactions : [...transactions, ...data.transactions]);
-      setHasMore(p < data.totalPages);
-      if (reset) setPage(1);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedMonth, selectedYear, selectedCategory, search, page]);
+  // Pagination state lives in refs so onEndReached always sees fresh values.
+  const pageRef = useRef(1);
+  const hasMoreRef = useRef(true);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
-    loadTransactions(true);
-  }, [selectedMonth, selectedCategory, search]);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const load = useCallback(
+    async (pageToLoad: number, reset: boolean) => {
+      if (loadingRef.current) return;
+      loadingRef.current = true;
+      setLoading(true);
+      try {
+        const data = await fetchTransactions({
+          month: selectedMonth,
+          year: selectedYear,
+          category: selectedCategory || undefined,
+          search: debouncedSearch || undefined,
+          page: pageToLoad,
+          limit: 50,
+        });
+        setTransactions((prev) => (reset ? data.transactions : [...prev, ...data.transactions]));
+        setTotals({ sumIncome: data.sumIncome ?? 0, sumExpenses: data.sumExpenses ?? 0, total: data.total });
+        pageRef.current = pageToLoad;
+        hasMoreRef.current = pageToLoad < data.totalPages;
+      } catch (e) {
+        console.error(e);
+      } finally {
+        loadingRef.current = false;
+        setLoading(false);
+      }
+    },
+    [selectedMonth, selectedYear, selectedCategory, debouncedSearch]
+  );
+
+  useEffect(() => {
+    load(1, true);
+  }, [selectedMonth, selectedCategory, debouncedSearch]);
 
   useEffect(() => {
     if (needsRefresh) {
-      loadTransactions(true);
+      load(1, true);
       setNeedsRefresh(false);
     }
   }, [needsRefresh]);
+
+  const handleEndReached = () => {
+    if (hasMoreRef.current && !loadingRef.current) {
+      load(pageRef.current + 1, false);
+    }
+  };
 
   const handleRecategorize = async (category: string) => {
     if (!selectedTxn) return;
     await updateCategory(selectedTxn.id, category);
     setSelectedTxn(null);
-    loadTransactions(true);
+    load(1, true);
   };
 
   const handleDelete = async () => {
     if (!selectedTxn) return;
     await deleteTransaction(selectedTxn.id);
     setSelectedTxn(null);
-    loadTransactions(true);
+    load(1, true);
   };
+
+  const sections = groupByDate(transactions);
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerSection}>
+      <View style={[styles.headerSection, { paddingTop: insets.top + spacing.lg }]}>
         <Text style={styles.title}>Activity</Text>
 
         {/* Month Selector */}
@@ -149,30 +192,45 @@ export default function TransactionsScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Month summary */}
+        {totals.total > 0 && (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryCount}>{totals.total} transactions</Text>
+            <View style={styles.summaryAmounts}>
+              <Text style={[styles.summaryValue, { color: colors.green }]}>
+                +{formatCurrency(totals.sumIncome)}
+              </Text>
+              <Text style={[styles.summaryValue, { color: colors.red }]}>
+                −{formatCurrency(totals.sumExpenses)}
+              </Text>
+            </View>
+          </View>
+        )}
       </View>
 
-      {/* Transaction List */}
-      <FlatList
-        data={transactions}
+      {/* Transaction List, grouped by date */}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.txnRow}>
             <TransactionItem transaction={item} onPress={setSelectedTxn} />
           </View>
         )}
+        renderSectionHeader={({ section }) => (
+          <Text style={styles.dateHeader}>{formatDateFull(section.title)}</Text>
+        )}
+        stickySectionHeadersEnabled={false}
         contentContainerStyle={styles.listContent}
-        onEndReached={() => {
-          if (hasMore && !loading) {
-            setPage((p) => p + 1);
-            loadTransactions();
-          }
-        }}
+        onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
               <MaterialCommunityIcons name="receipt" size={48} color={colors.textTertiary} />
               <Text style={styles.emptyText}>No transactions found</Text>
+              <Text style={styles.emptySub}>Try a different month or clear your filters</Text>
             </View>
           ) : null
         }
@@ -185,7 +243,7 @@ export default function TransactionsScreen() {
           <View style={styles.sheetContent}>
             <Text style={styles.sheetTitle}>{selectedTxn.description}</Text>
             <Text style={styles.sheetSubtitle}>
-              {selectedTxn.category} — {selectedTxn.source}
+              {formatDateFull(selectedTxn.date)} — {selectedTxn.category} — {selectedTxn.source}
             </Text>
 
             <Text style={styles.sheetLabel}>Re-categorize</Text>
@@ -217,7 +275,6 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     padding: spacing.lg,
-    paddingTop: 60,
     gap: spacing.md,
   },
   title: {
@@ -292,6 +349,33 @@ const styles = StyleSheet.create({
     color: colors.text,
     paddingVertical: spacing.md,
   },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryCount: {
+    fontSize: fontSize.xs,
+    color: colors.textTertiary,
+  },
+  summaryAmounts: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  summaryValue: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  dateHeader: {
+    fontSize: fontSize.xs,
+    fontWeight: '700',
+    color: colors.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xs,
+  },
   listContent: {
     paddingHorizontal: spacing.lg,
     paddingBottom: 40,
@@ -303,10 +387,15 @@ const styles = StyleSheet.create({
   empty: {
     alignItems: 'center',
     paddingVertical: spacing.xxxl * 2,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   emptyText: {
     fontSize: fontSize.md,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  emptySub: {
+    fontSize: fontSize.sm,
     color: colors.textTertiary,
   },
   sheetContent: {

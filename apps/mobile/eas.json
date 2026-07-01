@@ -4,6 +4,9 @@
   },
   "build": {
     "preview": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fynance-api-phi.vercel.app"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -12,6 +15,9 @@
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fynance-api-phi.vercel.app"
+      },
       "android": {
         "buildType": "apk"
       }

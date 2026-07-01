@@ -73,6 +73,12 @@ export interface CategorySpending {
   icon: string;
 }
 
+export interface SplitwiseBalance {
+  youOwe: number;
+  owedToYou: number;
+  net: number;
+}
+
 export interface DashboardData {
   netWorth: number;
   netWorthChange: number;
@@ -82,11 +88,13 @@ export interface DashboardData {
   saved: number;
   savingsRate: number;
   investable: number;
+  spentLastMonth: number;
   spendingByCategory: CategorySpending[];
   budgetAlerts: CategorySpending[];
   goals: GoalProgress[];
   upcomingBills: UpcomingBill[];
   recentTransactions: Transaction[];
+  splitwise: SplitwiseBalance | null;
   lastSynced: string | null;
 }
 
@@ -130,4 +138,57 @@ export interface TransactionFilters {
   search?: string;
   page?: number;
   limit?: number;
+}
+
+export interface PlanAllocation {
+  tfsa: number;
+  rrsp: number;
+  fhsa: number;
+  emergency: number;
+  fun: number;
+}
+
+export interface PlanData {
+  month: string; // YYYY-MM
+  expectedIncome: number;
+  actualIncome: number;
+  fixedBills: number;
+  bills: { name: string; amount: number; dueDay: number; paid: boolean }[];
+  variableAvg3Mo: number;
+  variableSoFar: number;
+  variableProjected: number;
+  bufferPct: number;
+  buffer: number;
+  investable: number;
+  allocation: PlanAllocation;
+  locked: boolean;
+  saved: boolean; // true if a plan row exists in the sheet
+  rooms: {
+    tfsa: number;
+    rrsp: number;
+    fhsa: number;
+  };
+}
+
+export interface AppSettings {
+  monthly_income: number;
+  emergency_buffer_pct: number;
+  tfsa_room: number;
+  rrsp_room: number;
+  fhsa_room: number;
+  currency: string;
+}
+
+export interface NewGoal {
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  deadline: string;
+}
+
+export interface NewRecurringBill {
+  name: string;
+  amount: number;
+  due_day: number;
+  category: string;
 }

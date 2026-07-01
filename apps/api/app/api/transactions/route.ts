@@ -31,12 +31,8 @@ export async function GET(request: NextRequest) {
     }));
 
     if (month && year) {
-      const m = parseInt(month) - 1;
-      const y = parseInt(year);
-      transactions = transactions.filter((t) => {
-        const d = new Date(t.date);
-        return d.getMonth() === m && d.getFullYear() === y;
-      });
+      const key = `${year}-${String(parseInt(month)).padStart(2, '0')}`;
+      transactions = transactions.filter((t) => (t.date || '').slice(0, 7) === key);
     }
 
     if (category) {
@@ -48,17 +44,22 @@ export async function GET(request: NextRequest) {
       transactions = transactions.filter((t) => t.description.toLowerCase().includes(s));
     }
 
-    transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    transactions.sort((a, b) => (a.date < b.date ? 1 : -1));
 
     const total = transactions.length;
     const start = (page - 1) * limit;
     const paginated = transactions.slice(start, start + limit);
+
+    const sumIncome = transactions.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+    const sumExpenses = Math.abs(transactions.filter((t) => t.amount < 0).reduce((s, t) => s + t.amount, 0));
 
     return NextResponse.json({
       transactions: paginated,
       total,
       page,
       totalPages: Math.ceil(total / limit),
+      sumIncome: Math.round(sumIncome * 100) / 100,
+      sumExpenses: Math.round(sumExpenses * 100) / 100,
     });
   } catch (error) {
     console.error('Transactions GET error:', error);
